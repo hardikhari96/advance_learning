@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>The Event Loop — Node.js — Advance Learning</title>
+  <link rel="stylesheet" href="../../../assets/css/theme.css">
+</head>
+<body>
+  <nav class="blog-nav">
+    <a href="../../../index.html" class="nav-logo">Advance <span>Learning</span></a>
+    <div class="nav-breadcrumb">
+      <a href="../../../index.html">Home</a> /
+      <a href="#">Programming</a> /
+      <a href="index.html">Node.js</a>
+    </div>
+  </nav>
+
+  <main class="blog-container">
+    <article class="blog-post">
+      <header class="blog-header">
+        <div class="blog-meta">
+          <span class="blog-category">Programming</span>
+          <span class="blog-difficulty">Advanced</span>
+        </div>
+        <h1>The Event Loop — Visualized</h1>
+        <p class="blog-subtitle">See how Node.js juggles thousands of operations on a single thread</p>
+        <div class="blog-progress">
+          <div class="progress-bar"><div class="progress-fill"></div></div>
+          <span class="progress-text">0% Complete</span>
+        </div>
+      </header>
+
+      <!-- ===================== SECTION 1: Why Single Thread? ===================== -->
+      <section class="blog-section" id="section-1">
+        <h2>Why Single-Threaded?</h2>
+        <p>Node.js runs your JavaScript on <strong>one thread</strong>. But it handles thousands of concurrent connections. How?</p>
+
+        <div class="flip-card-grid">
+          <div class="flip-card">
+            <div class="flip-card-inner">
+              <div class="flip-front">What runs your JS code?</div>
+              <div class="flip-back">V8 Engine — compiles JS to machine code on a single thread</div>
+            </div>
+          </div>
+          <div class="flip-card">
+            <div class="flip-card-inner">
+              <div class="flip-front">What handles I/O?</div>
+              <div class="flip-back">libuv — delegates I/O to OS kernel or thread pool</div>
+            </div>
+          </div>
+          <div class="flip-card">
+            <div class="flip-card-inner">
+              <div class="flip-front">What connects them?</div>
+              <div class="flip-back">The Event Loop — picks up completed I/O and runs callbacks</div>
+            </div>
+          </div>
+          <div class="flip-card">
+            <div class="flip-card-inner">
+              <div class="flip-front">Thread Pool size?</div>
+              <div class="flip-back">Default: 4 threads (UV_THREADPOOL_SIZE) — for fs, dns, crypto</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===================== SECTION 2: Event Loop Phases ===================== -->
+      <section class="blog-section" id="section-2">
+        <h2>The 6 Phases</h2>
+        <p>The event loop cycles through these phases in order. Click each step to explore.</p>
+
+        <div class="step-reveal" id="phase-steps">
+          <div class="step" data-step="1">
+            <div class="step-header">
+              <div class="step-number">1</div>
+              <h3>Timers</h3>
+            </div>
+            <div class="step-content">
+              <p>Executes callbacks from <code>setTimeout()</code> and <code>setInterval()</code> whose threshold has elapsed.</p>
+              <div class="info-box tip">
+                <strong>Key insight:</strong> Timer callbacks are not guaranteed to run at exact time — they run as soon as possible <em>after</em> the delay, once the event loop reaches this phase.
+              </div>
+            </div>
+          </div>
+
+          <div class="step" data-step="2">
+            <div class="step-header">
+              <div class="step-number">2</div>
+              <h3>Pending Callbacks</h3>
+            </div>
+            <div class="step-content">
+              <p>Executes I/O callbacks deferred from the previous loop iteration (e.g., TCP errors like <code>ECONNREFUSED</code>).</p>
+            </div>
+          </div>
+
+          <div class="step" data-step="3">
+            <div class="step-header">
+              <div class="step-number">3</div>
+              <h3>Idle / Prepare</h3>
+            </div>
+            <div class="step-content">
+              <p>Internal use only. Node uses this for housekeeping. You won't interact with this phase directly.</p>
+            </div>
+          </div>
+
+          <div class="step" data-step="4">
+            <div class="step-header">
+              <div class="step-number">4</div>
+              <h3>Poll</h3>
+            </div>
+            <div class="step-content">
+              <p>The <strong>most important phase</strong>. Retrieves new I/O events and executes their callbacks (file reads, network responses, etc.).</p>
+              <div class="info-box warning">
+                <strong>Blocking behavior:</strong> If no timers are scheduled, the poll phase will <em>wait</em> for callbacks to be added, then execute them immediately.
+              </div>
+            </div>
+          </div>
+
+          <div class="step" data-step="5">
+            <div class="step-header">
+              <div class="step-number">5</div>
+              <h3>Check</h3>
+            </div>
+            <div class="step-content">
+              <p>Executes <code>setImmediate()</code> callbacks. This runs right after the poll phase completes.</p>
+            </div>
+          </div>
+
+          <div class="step" data-step="6">
+            <div class="step-header">
+              <div class="step-number">6</div>
+              <h3>Close Callbacks</h3>
+            </div>
+            <div class="step-content">
+              <p>Handles close events like <code>socket.on('close', ...)</code>. Cleanup happens here.</p>
+            </div>
+          </div>
+
+          <button class="next-step-btn">Next Phase →</button>
+        </div>
+      </section>
+
+      <!-- ===================== SECTION 3: Live Event Loop Visualization ===================== -->
+      <section class="blog-section" id="section-3">
+        <h2>Watch It Run</h2>
+        <p>This visualization shows the event loop processing different types of operations in real time.</p>
+
+        <div class="visual-demo" id="event-loop-viz">
+          <div class="el-viz-container">
+            <div class="el-phase-ring">
+              <div class="el-phase" data-phase="timers">Timers</div>
+              <div class="el-phase" data-phase="pending">Pending</div>
+              <div class="el-phase" data-phase="idle">Idle</div>
+              <div class="el-phase" data-phase="poll">Poll</div>
+              <div class="el-phase" data-phase="check">Check</div>
+              <div class="el-phase" data-phase="close">Close</div>
+            </div>
+            <div class="el-center">
+              <div class="el-current-label">Idle</div>
+            </div>
+            <div class="el-callback-queue">
+              <h4>Callback Queue</h4>
+              <div class="el-queue-items" id="el-queue"></div>
+            </div>
+          </div>
+          <div class="demo-controls">
+            <button class="demo-btn" id="el-start-btn">Start Loop</button>
+            <button class="demo-btn" id="el-add-timer" style="background:var(--color-secondary)">+ setTimeout</button>
+            <button class="demo-btn" id="el-add-io" style="background:var(--color-accent);color:#000">+ I/O Read</button>
+            <button class="demo-btn" id="el-add-immediate" style="background:var(--color-warning);color:#000">+ setImmediate</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===================== SECTION 4: Code Playground ===================== -->
+      <section class="blog-section" id="section-4">
+        <h2>Predict the Output</h2>
+        <p>Run this code and see the order. Can you explain <strong>why</strong> it prints in this order?</p>
+
+        <div class="code-playground">
+          <div class="playground-header">
+            <div class="playground-dots"><span></span><span></span><span></span></div>
+            <span class="playground-title">script.js</span>
+          </div>
+          <div class="code-editor" contenteditable="true">console.log('1 - Start');
+
+setTimeout(() => console.log('2 - setTimeout'), 0);
+
+Promise.resolve().then(() => console.log('3 - Promise'));
+
+console.log('4 - End');</div>
+          <div class="playground-actions">
+            <button class="run-btn">▶ Run</button>
+            <button class="reset-btn">↺ Reset</button>
+          </div>
+          <div class="code-output"></div>
+        </div>
+
+        <div class="info-box tip mt-lg">
+          <strong>Why this order?</strong> Microtasks (Promises) run between each phase of the event loop — <em>before</em> the next macrotask (setTimeout). So: sync code first → microtasks → macrotasks.
+        </div>
+      </section>
+
+      <!-- ===================== SECTION 5: Microtasks vs Macrotasks ===================== -->
+      <section class="blog-section" id="section-5">
+        <h2>Micro vs Macro Tasks</h2>
+        <p>Drag each API to its correct queue.</p>
+
+        <div class="drag-drop-zone">
+          <div class="drag-items">
+            <div class="drag-item" draggable="true" data-value="promise">Promise.then()</div>
+            <div class="drag-item" draggable="true" data-value="settimeout">setTimeout()</div>
+            <div class="drag-item" draggable="true" data-value="nexttick">process.nextTick()</div>
+            <div class="drag-item" draggable="true" data-value="setimmediate">setImmediate()</div>
+            <div class="drag-item" draggable="true" data-value="queuemicro">queueMicrotask()</div>
+            <div class="drag-item" draggable="true" data-value="setinterval">setInterval()</div>
+          </div>
+          <div class="drop-targets">
+            <div class="drop-target" data-accept="promise" data-label="Microtask">
+              🔬 Microtask Queue
+            </div>
+            <div class="drop-target" data-accept="nexttick" data-label="Microtask">
+              🔬 Microtask Queue
+            </div>
+            <div class="drop-target" data-accept="queuemicro" data-label="Microtask">
+              🔬 Microtask Queue
+            </div>
+            <div class="drop-target" data-accept="settimeout" data-label="Macrotask">
+              📦 Macrotask Queue
+            </div>
+            <div class="drop-target" data-accept="setimmediate" data-label="Macrotask">
+              📦 Macrotask Queue
+            </div>
+            <div class="drop-target" data-accept="setinterval" data-label="Macrotask">
+              📦 Macrotask Queue
+            </div>
+          </div>
+          <div class="drag-feedback"></div>
+        </div>
+      </section>
+
+      <!-- ===================== SECTION 6: setTimeout vs setImmediate ===================== -->
+      <section class="blog-section" id="section-6">
+        <h2>setTimeout(0) vs setImmediate()</h2>
+        <p>These two are often confused. Try the playground to see the non-deterministic behavior.</p>
+
+        <div class="code-playground">
+          <div class="playground-header">
+            <div class="playground-dots"><span></span><span></span><span></span></div>
+            <span class="playground-title">timing.js</span>
+          </div>
+          <div class="code-editor" contenteditable="true">// Run this multiple times — the order may change!
+// In Node.js, outside I/O, the order is non-deterministic
+
+setTimeout(() => console.log('setTimeout'), 0);
+// setImmediate is Node-only, simulated here:
+Promise.resolve().then(() => {
+  console.log('setImmediate (simulated via microtask)');
+});
+
+// But INSIDE an I/O callback, setImmediate always runs first:
+// fs.readFile('file', () => {
+//   setTimeout(() => console.log('timeout'), 0);
+//   setImmediate(() => console.log('immediate')); // always first
+// });</div>
+          <div class="playground-actions">
+            <button class="run-btn">▶ Run</button>
+            <button class="reset-btn">↺ Reset</button>
+          </div>
+          <div class="code-output"></div>
+        </div>
+
+        <div class="quiz-card" data-correct="2">
+          <p class="quiz-question">Inside an I/O callback, which fires first?</p>
+          <div class="quiz-options">
+            <button class="quiz-option" data-index="1">setTimeout(fn, 0)</button>
+            <button class="quiz-option" data-index="2">setImmediate(fn)</button>
+            <button class="quiz-option" data-index="3">Non-deterministic</button>
+          </div>
+          <div class="quiz-feedback" data-correct-text="Correct! Inside I/O, setImmediate always runs before setTimeout(0)." data-incorrect-text="Inside an I/O callback, setImmediate ALWAYS fires first — it runs in the Check phase right after Poll."></div>
+        </div>
+      </section>
+
+      <!-- ===================== SECTION 7: process.nextTick Deep Dive ===================== -->
+      <section class="blog-section" id="section-7">
+        <h2>process.nextTick() — The Queue Jumper</h2>
+        <p><code>process.nextTick()</code> runs before any other microtask. It can even starve the event loop.</p>
+
+        <div class="code-playground">
+          <div class="playground-header">
+            <div class="playground-dots"><span></span><span></span><span></span></div>
+            <span class="playground-title">nexttick.js</span>
+          </div>
+          <div class="code-editor" contenteditable="true">// Simulating process.nextTick priority
+// In real Node.js, nextTick runs before Promise.then
+
+const results = [];
+
+// Simulating event loop priority
+Promise.resolve().then(() => results.push('Promise 1'));
+Promise.resolve().then(() => results.push('Promise 2'));
+
+// nextTick would run BEFORE these promises in real Node.js
+// It has its own queue that drains before the microtask queue
+
+queueMicrotask(() => results.push('queueMicrotask'));
+
+setTimeout(() => {
+  results.push('setTimeout');
+  console.log('Execution order:');
+  results.forEach((r, i) => console.log((i+1) + '. ' + r));
+}, 10);</div>
+          <div class="playground-actions">
+            <button class="run-btn">▶ Run</button>
+            <button class="reset-btn">↺ Reset</button>
+          </div>
+          <div class="code-output"></div>
+        </div>
+
+        <div class="info-box warning">
+          <strong>Danger:</strong> Recursive <code>process.nextTick()</code> calls will starve I/O — the event loop never reaches the poll phase. Use <code>setImmediate()</code> for recursive async patterns instead.
+        </div>
+      </section>
+
+      <!-- ===================== SECTION 8: Terminal Challenge ===================== -->
+      <section class="blog-section" id="section-8">
+        <h2>Terminal Challenge</h2>
+        <p>Type Node.js commands to explore event loop behavior. Try: <code>node -e "code"</code></p>
+
+        <div class="terminal-sim" id="node-terminal" data-commands='{}'>
+          <div class="terminal-header">
+            <div class="playground-dots"><span></span><span></span><span></span></div>
+            &nbsp; Node.js Interactive Terminal
+          </div>
+          <div class="terminal-body">
+            <div class="terminal-output"><span class="result">Welcome to Node.js Event Loop Explorer</span>
+<span class="result">Try these commands:</span>
+<span class="cmd">  phases</span> <span class="result">— Show all event loop phases</span>
+<span class="cmd">  run setTimeout</span> <span class="result">— Simulate setTimeout flow</span>
+<span class="cmd">  run promise</span> <span class="result">— Simulate Promise resolution</span>
+<span class="cmd">  run io</span> <span class="result">— Simulate I/O operation</span>
+<span class="cmd">  order</span> <span class="result">— Show execution priority order</span>
+<span class="cmd">  quiz</span> <span class="result">— Quick quiz question</span>
+<span class="cmd">  help</span> <span class="result">— Show available commands</span>
+</div>
+            <div class="terminal-input-line">
+              <span class="terminal-prompt">node&gt; </span>
+              <input type="text" class="terminal-input" placeholder="Type a command...">
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===================== SECTION 9: Summary Quiz ===================== -->
+      <section class="blog-section blog-summary" id="summary">
+        <h2>What You Learned</h2>
+        <p>Final check — answer these to confirm your understanding.</p>
+
+        <div class="quiz-card" data-correct="3">
+          <p class="quiz-question">How many phases does the Node.js event loop have?</p>
+          <div class="quiz-options">
+            <button class="quiz-option" data-index="1">4 phases</button>
+            <button class="quiz-option" data-index="2">5 phases</button>
+            <button class="quiz-option" data-index="3">6 phases</button>
+            <button class="quiz-option" data-index="4">8 phases</button>
+          </div>
+          <div class="quiz-feedback" data-correct-text="Correct! Timers → Pending → Idle/Prepare → Poll → Check → Close." data-incorrect-text="The event loop has 6 phases: Timers, Pending Callbacks, Idle/Prepare, Poll, Check, Close Callbacks."></div>
+        </div>
+
+        <div class="quiz-card mt-lg" data-correct="1">
+          <p class="quiz-question">Which queue drains first between event loop phases?</p>
+          <div class="quiz-options">
+            <button class="quiz-option" data-index="1">Microtask queue (nextTick + Promises)</button>
+            <button class="quiz-option" data-index="2">Macrotask queue (timers)</button>
+            <button class="quiz-option" data-index="3">They alternate equally</button>
+          </div>
+          <div class="quiz-feedback" data-correct-text="Correct! The microtask queue (process.nextTick first, then Promises) drains completely between each phase." data-incorrect-text="Microtasks always drain completely between each event loop phase. nextTick runs before Promise callbacks."></div>
+        </div>
+
+        <div class="quiz-card mt-lg" data-correct="2">
+          <p class="quiz-question">What is the most important event loop phase for I/O?</p>
+          <div class="quiz-options">
+            <button class="quiz-option" data-index="1">Timers</button>
+            <button class="quiz-option" data-index="2">Poll</button>
+            <button class="quiz-option" data-index="3">Check</button>
+            <button class="quiz-option" data-index="4">Close Callbacks</button>
+          </div>
+          <div class="quiz-feedback" data-correct-text="Correct! The Poll phase retrieves new I/O events and executes I/O callbacks." data-incorrect-text="The Poll phase is where I/O callbacks are processed. It's the most critical phase for I/O-heavy applications."></div>
+        </div>
+      </section>
+    </article>
+
+    <nav class="blog-pagination">
+      <span class="prev-blog" style="opacity:0.3">← Previous</span>
+      <a href="index.html" class="blog-index">All Node.js Blogs</a>
+      <span class="next-blog" style="opacity:0.3">Next →</span>
+    </nav>
+  </main>
+
+  <footer class="blog-footer">
+    <p>Advance Learning — Learn by doing</p>
+  </footer>
+
+  <script src="../../../assets/js/theme.js"></script>
+  <script>
+    /* ======= Event Loop Visualization ======= */
+    (function () {
+      var phases = ['timers', 'pending', 'idle', 'poll', 'check', 'close'];
+      var phaseLabels = { timers: 'Timers', pending: 'Pending', idle: 'Idle/Prepare', poll: 'Poll', check: 'Check', close: 'Close' };
+      var phaseEls = document.querySelectorAll('.el-phase');
+      var centerLabel = document.querySelector('.el-current-label');
+      var queueEl = document.getElementById('el-queue');
+      var startBtn = document.getElementById('el-start-btn');
+      var running = false;
+      var currentPhase = 0;
+      var queue = [];
+      var loopInterval;
+
+      function updateViz() {
+        phaseEls.forEach(function (el) { el.classList.remove('active'); });
+        if (phaseEls[currentPhase]) phaseEls[currentPhase].classList.add('active');
+        centerLabel.textContent = phaseLabels[phases[currentPhase]];
+
+        // Process matching callbacks
+        var phaseName = phases[currentPhase];
+        var remaining = [];
+        queue.forEach(function (item) {
+          if (item.phase === phaseName) {
+            // Process callback - flash the phase
+            phaseEls[currentPhase].classList.add('processing');
+            setTimeout(function () {
+              phaseEls[currentPhase].classList.remove('processing');
+            }, 300);
+          } else {
+            remaining.push(item);
+          }
+        });
+        queue = remaining;
+        renderQueue();
+      }
+
+      function renderQueue() {
+        queueEl.innerHTML = '';
+        if (!queue.length) {
+          queueEl.innerHTML = '<span class="el-empty">Empty</span>';
+          return;
+        }
+        queue.forEach(function (item) {
+          var el = document.createElement('div');
+          el.className = 'el-queue-item ' + item.type;
+          el.textContent = item.label;
+          queueEl.appendChild(el);
+        });
+      }
+
+      function tick() {
+        currentPhase = (currentPhase + 1) % phases.length;
+        updateViz();
+      }
+
+      startBtn.addEventListener('click', function () {
+        if (running) {
+          clearInterval(loopInterval);
+          startBtn.textContent = 'Start Loop';
+          running = false;
+        } else {
+          loopInterval = setInterval(tick, 1000);
+          startBtn.textContent = 'Stop Loop';
+          running = true;
+          updateViz();
+        }
+      });
+
+      document.getElementById('el-add-timer').addEventListener('click', function () {
+        queue.push({ phase: 'timers', type: 'timer', label: 'setTimeout cb' });
+        renderQueue();
+      });
+
+      document.getElementById('el-add-io').addEventListener('click', function () {
+        queue.push({ phase: 'poll', type: 'io', label: 'fs.readFile cb' });
+        renderQueue();
+      });
+
+      document.getElementById('el-add-immediate').addEventListener('click', function () {
+        queue.push({ phase: 'check', type: 'immediate', label: 'setImmediate cb' });
+        renderQueue();
+      });
+
+      renderQueue();
+    })();
+
+    /* ======= Terminal Command Handler ======= */
+    (function () {
+      var terminal = document.getElementById('node-terminal');
+      if (!terminal) return;
+
+      var quizzes = [
+        { q: 'Does setTimeout(fn,0) guarantee immediate execution?', a: 'No! It runs in the next Timers phase, after microtasks drain.' },
+        { q: 'Can process.nextTick starve I/O?', a: 'Yes! Recursive nextTick calls prevent the loop from reaching Poll.' },
+        { q: 'Which phase handles setImmediate?', a: 'The Check phase — right after Poll.' }
+      ];
+      var quizIdx = 0;
+
+      terminal._commandHandler = function (cmd) {
+        cmd = cmd.trim().toLowerCase();
+
+        if (cmd === 'help') {
+          return 'Available: phases, run setTimeout, run promise, run io, order, quiz, clear';
+        }
+        if (cmd === 'phases') {
+          return '┌─ Event Loop Phases ─────────────────┐\n' +
+                 '│ 1. Timers      → setTimeout/setInterval │\n' +
+                 '│ 2. Pending     → deferred I/O callbacks  │\n' +
+                 '│ 3. Idle/Prepare → internal housekeeping  │\n' +
+                 '│ 4. Poll        → I/O callbacks (main)    │\n' +
+                 '│ 5. Check       → setImmediate callbacks  │\n' +
+                 '│ 6. Close       → cleanup (socket.close)  │\n' +
+                 '└──────────────────────────────────────┘\n' +
+                 'Between each phase: microtask queue drains (nextTick → Promises)';
+        }
+        if (cmd === 'run settimeout') {
+          return '→ setTimeout(fn, 1000) called\n' +
+                 '→ Timer registered in libuv\n' +
+                 '→ Event loop continues...\n' +
+                 '→ ~1000ms later, Timers phase picks up callback\n' +
+                 '→ fn() executes on the main thread';
+        }
+        if (cmd === 'run promise') {
+          return '→ Promise.resolve().then(fn) called\n' +
+                 '→ fn added to microtask queue\n' +
+                 '→ Current synchronous code finishes\n' +
+                 '→ Microtask queue drains BEFORE next phase\n' +
+                 '→ fn() executes';
+        }
+        if (cmd === 'run io') {
+          return '→ fs.readFile("data.json", fn) called\n' +
+                 '→ libuv sends request to thread pool\n' +
+                 '→ Worker thread reads file from disk\n' +
+                 '→ Worker signals completion to event loop\n' +
+                 '→ Poll phase picks up fn callback\n' +
+                 '→ fn(err, data) executes on main thread';
+        }
+        if (cmd === 'order') {
+          return 'Execution Priority (highest → lowest):\n' +
+                 '1. Synchronous code (call stack)\n' +
+                 '2. process.nextTick callbacks\n' +
+                 '3. Promise.then / queueMicrotask\n' +
+                 '4. setTimeout / setInterval (Timers)\n' +
+                 '5. I/O callbacks (Poll)\n' +
+                 '6. setImmediate (Check)\n' +
+                 '7. Close callbacks';
+        }
+        if (cmd === 'quiz') {
+          var q = quizzes[quizIdx % quizzes.length];
+          quizIdx++;
+          return 'Q: ' + q.q + '\nA: ' + q.a;
+        }
+        if (cmd === 'clear') {
+          var output = terminal.querySelector('.terminal-output');
+          output.innerHTML = '';
+          return '';
+        }
+        return 'Unknown command. Type "help" for available commands.';
+      };
+    })();
+  </script>
+
+  <!-- Blog-specific styles for event loop visualization -->
+  <style>
+    .el-viz-container {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: center;
+      gap: var(--space-xl);
+      padding: var(--space-xl);
+    }
+
+    .el-phase-ring {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: var(--space-sm);
+      position: relative;
+    }
+
+    .el-phase {
+      padding: var(--space-md) var(--space-lg);
+      background: var(--color-bg);
+      border: 2px solid var(--color-border);
+      border-radius: var(--border-radius-sm);
+      text-align: center;
+      font-size: var(--font-size-sm);
+      font-weight: 600;
+      color: var(--color-text-muted);
+      transition: all var(--transition-base);
+    }
+
+    .el-phase.active {
+      border-color: var(--color-primary);
+      color: var(--color-primary-light);
+      background: rgba(108, 99, 255, 0.1);
+      box-shadow: 0 0 20px rgba(108, 99, 255, 0.2);
+    }
+
+    .el-phase.processing {
+      background: rgba(67, 233, 123, 0.15);
+      border-color: var(--color-success);
+      color: var(--color-success);
+    }
+
+    .el-center {
+      text-align: center;
+    }
+
+    .el-current-label {
+      font-size: var(--font-size-xl);
+      font-weight: 800;
+      color: var(--color-primary-light);
+    }
+
+    .el-callback-queue {
+      min-width: 200px;
+    }
+
+    .el-callback-queue h4 {
+      margin-bottom: var(--space-sm);
+      font-size: var(--font-size-sm);
+      color: var(--color-text-muted);
+    }
+
+    .el-queue-items {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-xs);
+    }
+
+    .el-queue-item {
+      padding: var(--space-xs) var(--space-sm);
+      border-radius: 4px;
+      font-size: var(--font-size-sm);
+      font-weight: 600;
+      animation: fadeInUp 0.3s ease;
+    }
+
+    .el-queue-item.timer {
+      background: rgba(255, 101, 132, 0.15);
+      color: var(--color-secondary);
+      border: 1px solid rgba(255, 101, 132, 0.3);
+    }
+
+    .el-queue-item.io {
+      background: rgba(67, 233, 123, 0.1);
+      color: var(--color-accent);
+      border: 1px solid rgba(67, 233, 123, 0.25);
+    }
+
+    .el-queue-item.immediate {
+      background: rgba(255, 217, 61, 0.1);
+      color: var(--color-warning);
+      border: 1px solid rgba(255, 217, 61, 0.25);
+    }
+
+    .el-empty {
+      color: var(--color-text-muted);
+      font-size: var(--font-size-sm);
+      font-style: italic;
+    }
+
+    @media (max-width: 640px) {
+      .el-viz-container {
+        flex-direction: column;
+      }
+      .el-phase-ring {
+        grid-template-columns: repeat(2, 1fr);
+      }
+      .demo-controls {
+        flex-wrap: wrap;
+      }
+    }
+  </style>
+</body>
+</html>
